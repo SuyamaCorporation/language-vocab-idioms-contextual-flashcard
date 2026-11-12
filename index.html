@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>語彙・イディオム フラッシュカード</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .card-wrap { perspective: 1000px; }
+  .card { width:100%; height:260px; position:relative; transform-style:preserve-3d; transition:transform 0.55s; cursor:pointer; }
+  .card.flipped { transform:rotateY(180deg); }
+  .face { position:absolute; width:100%; height:100%; backface-visibility:hidden; border-radius:1rem; padding:1.5rem; display:flex; flex-direction:column; justify-content:center; box-shadow:0 4px 24px rgba(0,0,0,0.13); }
+  .face-front { background:linear-gradient(135deg,#1e1b4b,#4338ca); color:white; }
+  .face-back { background:linear-gradient(135deg,#064e3b,#065f46); color:white; transform:rotateY(180deg); }
+  .tag { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:0.7rem; font-weight:600; margin:2px; }
+  textarea { resize:vertical; }
+  .tab-active { border-bottom: 3px solid #4f46e5; color: #4f46e5; font-weight:700; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div class="max-w-2xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-center text-indigo-900 mb-1">語彙・イディオム フラッシュカード</h1>
+  <p class="text-center text-gray-500 text-sm mb-5">SM-2 式間隔反復 + 文脈例文 + タグ管理</p>
+
+  <!-- Tabs -->
+  <div class="flex border-b mb-5">
+    <button class="px-5 py-2 text-sm transition tab-active" id="tab-study" onclick="showTab('study')">学習</button>
+    <button class="px-5 py-2 text-sm transition text-gray-500 hover:text-indigo-600" id="tab-add" onclick="showTab('add')">追加</button>
+    <button class="px-5 py-2 text-sm transition text-gray-500 hover:text-indigo-600" id="tab-list" onclick="showTab('list')">一覧</button>
+    <button class="px-5 py-2 text-sm transition text-gray-500 hover:text-indigo-600" id="tab-io" onclick="showTab('io')">入出力</button>
+  </div>
+
+  <!-- Study Tab -->
+  <div id="pane-study">
+    <div class="flex gap-2 mb-4 flex-wrap" id="tag-filter-row"></div>
+    <div id="no-cards-msg" class="hidden text-center text-gray-400 py-10">
+      <p class="text-4xl mb-2">📭</p>
+      <p>学習するカードがありません。<br>「追加」タブからカードを作成してください。</p>
+    </div>
+    <div id="study-area">
+      <div class="card-wrap mb-4">
+        <div class="card" id="flashcard" onclick="flipCard()">
+          <div class="face face-front">
+            <div id="f-tags" class="mb-2"></div>
+            <div id="f-word" class="text-3xl font-bold mb-1"></div>
+            <div id="f-def-hint" class="text-sm opacity-70"></div>
+            <div class="text-xs opacity-40 mt-auto text-right">タップしてめくる</div>
+          </div>
+          <div class="face face-back">
+            <div id="b-definition" class="text-xl font-bold mb-3"></div>
+            <div id="b-ex1" class="text-sm opacity-80 mb-1 italic"></div>
+            <div id="b-ex2" class="text-sm opacity-70 italic"></div>
+            <div id="b-next-review" class="text-xs opacity-50 mt-auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow p-4 mb-4">
+        <div class="text-sm font-semibold text-gray-600 mb-3 text-center">評価（SM-2）</div>
+        <div class="grid grid-cols-4 gap-2">
+          <button onclick="rateCard(0)" class="bg-red-100 text-red-700 py-2 rounded-lg text-sm font-semibold hover:bg-red-200 transition">Again<br><span class="text-xs font-normal">覚え直し</span></button>
+          <button onclick="rateCard(1)" class="bg-orange-100 text-orange-700 py-2 rounded-lg text-sm font-semibold hover:bg-orange-200 transition">Hard<br><span class="text-xs font-normal">難しい</span></button>
+          <button onclick="rateCard(2)" class="bg-blue-100 text-blue-700 py-2 rounded-lg text-sm font-semibold hover:bg-blue-200 transition">Good<br><span class="text-xs font-normal">わかる</span></button>
+          <button onclick="rateCard(3)" class="bg-green-100 text-green-700 py-2 rounded-lg text-sm font-semibold hover:bg-green-200 transition">Easy<br><span class="text-xs font-normal">簡単</span></button>
+        </div>
+      </div>
+
+      <div class="text-center text-xs text-gray-400" id="study-counter"></div>
+    </div>
+  </div>
+
+  <!-- Add Tab -->
+  <div id="pane-add" class="hidden">
+    <div class="bg-white rounded-xl shadow p-5">
+      <h2 class="font-semibold text-gray-700 mb-4" id="add-title">新規カード追加</h2>
+      <input type="hidden" id="edit-id">
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">単語 / イディオム *</label>
+          <input type="text" id="f-word-input" placeholder="例: kick the bucket" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">定義・意味 *</label>
+          <textarea id="f-def-input" rows="2" placeholder="例: 死ぬ（俗語）" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">例文1</label>
+          <input type="text" id="f-ex1-input" placeholder="例: He finally kicked the bucket at age 90." class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">例文2</label>
+          <input type="text" id="f-ex2-input" placeholder="例: 彼は90歳で息を引き取った。" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">タグ（カンマ区切り）</label>
+          <input type="text" id="f-tags-input" placeholder="例: イディオム, 英語, 中級" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400">
+        </div>
+        <div class="flex gap-2">
+          <button onclick="saveCard()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700">保存</button>
+          <button onclick="clearForm()" class="bg-gray-200 text-gray-600 py-2 px-4 rounded-lg hover:bg-gray-300">クリア</button>
+        </div>
+        <div id="add-msg" class="hidden text-sm text-green-600 font-semibold"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- List Tab -->
+  <div id="pane-list" class="hidden">
+    <div class="flex gap-2 mb-3 flex-wrap" id="list-tag-filter"></div>
+    <div id="card-list" class="space-y-2"></div>
+    <div id="list-empty" class="hidden text-center text-gray-400 py-8">カードがありません</div>
+  </div>
+
+  <!-- IO Tab -->
+  <div id="pane-io" class="hidden">
+    <div class="bg-white rounded-xl shadow p-5 space-y-4">
+      <h2 class="font-semibold text-gray-700">データ入出力</h2>
+      <button onclick="exportData()" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">📤 JSONエクスポート</button>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">JSONインポート</label>
+        <textarea id="import-json" rows="5" placeholder='[{"word":"...","definition":"...","ex1":"...","ex2":"...","tags":["..."]}]' class="w-full border rounded px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-400"></textarea>
+        <button onclick="importData()" class="mt-2 w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">📥 インポート</button>
+        <div id="io-msg" class="hidden mt-2 text-sm font-semibold"></div>
+      </div>
+      <div class="pt-2 border-t">
+        <button onclick="if(confirm('全カードを削除しますか？'))clearAll()" class="w-full bg-red-100 text-red-700 py-2 rounded-lg hover:bg-red-200">🗑️ 全データ削除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let cards = JSON.parse(localStorage.getItem('vocab-cards') || '[]');
+let activeTag = 'すべて';
+let studyQueue = [];
+let studyIdx = 0;
+let isFlipped = false;
+
+function save() { localStorage.setItem('vocab-cards', JSON.stringify(cards)); }
+
+function getStudyCards() {
+  const now = Date.now();
+  let filtered = activeTag === 'すべて' ? cards : cards.filter(c => c.tags && c.tags.includes(activeTag));
+  let due = filtered.filter(c => !c.nextReview || c.nextReview <= now);
+  if (!due.length) due = filtered;
+  return due;
+}
+
+function showTab(tab) {
+  ['study','add','list','io'].forEach(t => {
+    document.getElementById('pane-'+t).classList.toggle('hidden', t !== tab);
+    const btn = document.getElementById('tab-'+t);
+    btn.className = 'px-5 py-2 text-sm transition ' + (t === tab ? 'tab-active' : 'text-gray-500 hover:text-indigo-600');
+  });
+  if (tab === 'study') { studyQueue = getStudyCards(); studyIdx = 0; renderStudy(); buildTagFilters(); }
+  if (tab === 'list') renderList();
+  if (tab === 'add') { clearForm(); }
+}
+
+function allTags() {
+  const tags = new Set(['すべて']);
+  cards.forEach(c => (c.tags||[]).forEach(t => tags.add(t)));
+  return [...tags];
+}
+
+function buildTagFilters() {
+  ['tag-filter-row','list-tag-filter'].forEach(id => {
+    const container = document.getElementById(id);
+    if (!container) return;
+    container.innerHTML = '';
+    allTags().forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'tag ' + (tag === activeTag ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300');
+      btn.textContent = tag;
+      btn.onclick = () => { activeTag = tag; buildTagFilters(); studyQueue = getStudyCards(); studyIdx = 0; renderStudy(); if(id==='list-tag-filter') renderList(); };
+      container.appendChild(btn);
+    });
+  });
+}
+
+function renderStudy() {
+  studyQueue = getStudyCards();
+  if (!studyQueue.length) {
+    document.getElementById('no-cards-msg').classList.remove('hidden');
+    document.getElementById('study-area').classList.add('hidden');
+    return;
+  }
+  document.getElementById('no-cards-msg').classList.add('hidden');
+  document.getElementById('study-area').classList.remove('hidden');
+  if (studyIdx >= studyQueue.length) studyIdx = 0;
+  const card = studyQueue[studyIdx];
+  isFlipped = false;
+  document.getElementById('flashcard').classList.remove('flipped');
+
+  // Front
+  const tagsEl = document.getElementById('f-tags');
+  tagsEl.innerHTML = '';
+  (card.tags||[]).forEach(t => {
+    const span = document.createElement('span');
+    span.className = 'tag bg-indigo-800 text-white';
+    span.textContent = escapeHtml(t);
+    tagsEl.appendChild(span);
+  });
+  document.getElementById('f-word').textContent = card.word || '';
+  document.getElementById('f-def-hint').textContent = card.definition ? card.definition.substring(0, 20) + (card.definition.length > 20 ? '…' : '') : '';
+
+  // Back
+  document.getElementById('b-definition').textContent = card.definition || '';
+  document.getElementById('b-ex1').textContent = card.ex1 ? '"' + card.ex1 + '"' : '';
+  document.getElementById('b-ex2').textContent = card.ex2 ? '"' + card.ex2 + '"' : '';
+  const nr = card.nextReview ? new Date(card.nextReview).toLocaleDateString('ja-JP') : '未設定';
+  document.getElementById('b-next-review').textContent = '次回: ' + nr + (card.interval ? ' (間隔 ' + card.interval + '日)' : '');
+  document.getElementById('study-counter').textContent = (studyIdx+1) + '/' + studyQueue.length;
+}
+
+function flipCard() { isFlipped = !isFlipped; document.getElementById('flashcard').classList.toggle('flipped', isFlipped); }
+
+// SM-2 simplified
+function rateCard(q) { // q: 0=again,1=hard,2=good,3=easy
+  if (!studyQueue.length) return;
+  const card = studyQueue[studyIdx];
+  const idx = cards.findIndex(c => c.id === card.id);
+  if (idx === -1) return;
+  let { interval=1, easiness=2.5, repetitions=0 } = cards[idx];
+  if (q === 0) { repetitions = 0; interval = 1; }
+  else {
+    if (repetitions === 0) interval = 1;
+    else if (repetitions === 1) interval = 6;
+    else interval = Math.round(interval * easiness);
+    repetitions++;
+    easiness = Math.max(1.3, easiness + (0.1 - (3 - q) * (0.08 + (3 - q) * 0.02)));
+  }
+  cards[idx].interval = interval;
+  cards[idx].easiness = easiness;
+  cards[idx].repetitions = repetitions;
+  cards[idx].nextReview = Date.now() + interval * 86400000;
+  save();
+  studyIdx = (studyIdx + 1) % studyQueue.length;
+  renderStudy();
+}
+
+function saveCard() {
+  const word = document.getElementById('f-word-input').value.trim();
+  const def = document.getElementById('f-def-input').value.trim();
+  if (!word || !def) { alert('単語と定義は必須です'); return; }
+  const ex1 = document.getElementById('f-ex1-input').value.trim();
+  const ex2 = document.getElementById('f-ex2-input').value.trim();
+  const tags = document.getElementById('f-tags-input').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const editId = document.getElementById('edit-id').value;
+  if (editId) {
+    const idx = cards.findIndex(c=>c.id===editId);
+    if (idx>=0) { cards[idx] = {...cards[idx], word, definition:def, ex1, ex2, tags}; }
+  } else {
+    cards.push({ id: Date.now().toString(), word, definition:def, ex1, ex2, tags, repetitions:0, interval:1, easiness:2.5 });
+  }
+  save();
+  clearForm();
+  const msg = document.getElementById('add-msg');
+  msg.textContent = editId ? '更新しました' : 'カードを追加しました';
+  msg.classList.remove('hidden');
+  setTimeout(() => msg.classList.add('hidden'), 2000);
+}
+
+function clearForm() {
+  ['f-word-input','f-def-input','f-ex1-input','f-ex2-input','f-tags-input'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('edit-id').value = '';
+  document.getElementById('add-title').textContent = '新規カード追加';
+}
+
+function editCard(id) {
+  const card = cards.find(c=>c.id===id);
+  if (!card) return;
+  document.getElementById('edit-id').value = id;
+  document.getElementById('f-word-input').value = card.word||'';
+  document.getElementById('f-def-input').value = card.definition||'';
+  document.getElementById('f-ex1-input').value = card.ex1||'';
+  document.getElementById('f-ex2-input').value = card.ex2||'';
+  document.getElementById('f-tags-input').value = (card.tags||[]).join(', ');
+  document.getElementById('add-title').textContent = 'カード編集';
+  showTab('add');
+}
+
+function deleteCard(id) {
+  if (!confirm('このカードを削除しますか？')) return;
+  cards = cards.filter(c=>c.id!==id);
+  save();
+  renderList();
+}
+
+function renderList() {
+  buildTagFilters();
+  const filtered = activeTag === 'すべて' ? cards : cards.filter(c => c.tags && c.tags.includes(activeTag));
+  const listEl = document.getElementById('card-list');
+  const emptyEl = document.getElementById('list-empty');
+  listEl.innerHTML = '';
+  if (!filtered.length) { emptyEl.classList.remove('hidden'); return; }
+  emptyEl.classList.add('hidden');
+  filtered.forEach(card => {
+    const div = document.createElement('div');
+    div.className = 'bg-white rounded-lg shadow p-3 flex items-start justify-between gap-2';
+    const left = document.createElement('div');
+    left.className = 'flex-1 min-w-0';
+    const wordEl = document.createElement('div');
+    wordEl.className = 'font-semibold text-gray-800 truncate';
+    wordEl.textContent = card.word;
+    const defEl = document.createElement('div');
+    defEl.className = 'text-sm text-gray-500 truncate';
+    defEl.textContent = card.definition;
+    const tagsEl = document.createElement('div');
+    tagsEl.className = 'mt-1';
+    (card.tags||[]).forEach(t => {
+      const span = document.createElement('span');
+      span.className = 'tag bg-indigo-100 text-indigo-700';
+      span.textContent = escapeHtml(t);
+      tagsEl.appendChild(span);
+    });
+    left.appendChild(wordEl); left.appendChild(defEl); left.appendChild(tagsEl);
+    const right = document.createElement('div');
+    right.className = 'flex gap-1 shrink-0';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200';
+    editBtn.textContent = '編集';
+    editBtn.onclick = () => editCard(card.id);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200';
+    delBtn.textContent = '削除';
+    delBtn.onclick = () => deleteCard(card.id);
+    right.appendChild(editBtn); right.appendChild(delBtn);
+    div.appendChild(left); div.appendChild(right);
+    listEl.appendChild(div);
+  });
+}
+
+function exportData() {
+  const json = JSON.stringify(cards, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'vocab-flashcards.json';
+  a.click();
+}
+
+function importData() {
+  const raw = document.getElementById('import-json').value.trim();
+  const msgEl = document.getElementById('io-msg');
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) throw new Error('配列形式が必要です');
+    const imported = data.map(d => ({
+      id: Date.now().toString() + Math.random(),
+      word: String(d.word||''),
+      definition: String(d.definition||''),
+      ex1: String(d.ex1||''),
+      ex2: String(d.ex2||''),
+      tags: Array.isArray(d.tags) ? d.tags.map(String) : [],
+      repetitions: 0, interval: 1, easiness: 2.5
+    }));
+    cards = [...cards, ...imported];
+    save();
+    document.getElementById('import-json').value = '';
+    msgEl.className = 'mt-2 text-sm font-semibold text-green-600';
+    msgEl.textContent = imported.length + '件インポートしました';
+    msgEl.classList.remove('hidden');
+  } catch(e) {
+    msgEl.className = 'mt-2 text-sm font-semibold text-red-600';
+    msgEl.textContent = 'エラー: ' + e.message;
+    msgEl.classList.remove('hidden');
+  }
+}
+
+function clearAll() { cards = []; save(); renderList(); showTab('study'); }
+
+// Init
+buildTagFilters();
+showTab('study');
+</script>
+</body>
+</html>
